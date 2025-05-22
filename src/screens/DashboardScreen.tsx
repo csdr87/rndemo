@@ -1,12 +1,48 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import * as Progress from 'react-native-progress';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 
 const DashboardScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [skills, setSkills] = useState<{ name: string; progress: number }[]>([]);
+
+  const overallProgress =
+    skills.length > 0
+      ? skills.reduce((acc, skill) => acc + skill.progress, 0) / (skills.length * 100)
+      : 0;
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadSkills = async () => {
+        try {
+          const stored = await AsyncStorage.getItem('@skills');
+          const parsed = stored ? JSON.parse(stored) : [];
+          setSkills(parsed);
+        } catch (e) {
+          console.error('Error loading skills:', e);
+        }
+      };
+
+      loadSkills();
+    }, [])
+  );
+
+  const handleDelete = async (index: number) => {
+    try {
+      const stored = await AsyncStorage.getItem('@skills');
+      const updatedSkills = stored ? JSON.parse(stored) : [];
+      updatedSkills.splice(index, 1); // elimina el skill por índice
+      await AsyncStorage.setItem('@skills', JSON.stringify(updatedSkills));
+      setSkills(updatedSkills); // actualiza estado local
+    } catch (e) {
+      console.error('Error deleting skill:', e);
+    }
+  };
 
   return (
     <View style={style.container}>
@@ -20,31 +56,30 @@ const DashboardScreen = () => {
         </View>
 
         <View style={style.progressContainer}>
-          <Progress.Circle progress={0.6} size={130} thickness={13} showsText={true} direction={'counter-clockwise'}/>
+          <Progress.Circle progress={overallProgress} size={130} thickness={13} showsText={true} direction={'counter-clockwise'} />
           <Text style={style.progressText}>Completed road</Text>
         </View>
 
         <Text style={style.activeSkillsTitle}>Active Skills</Text>
         <Text style={style.activeSkillsSubtitle}>Your most recent progress</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {['React', 'Logic', 'Hooks'].map((skill, i) => (
+          {skills.map((skill, i) => (
             <View key={i} style={style.skillCard}>
-              <View style={style.skillChartRow}>
-                <View style={style.progressBarContainer}>
-                  <View style={style.progressBarBackground}>
-                    <Progress.Bar
-                      progress={(40 + i * 15) / 100}
-                      width={136}
-                      borderRadius={4}
-                      color="#2563eb"
-                      unfilledColor="#cbd5e1"
-                      borderWidth={0}
-                    />
-                  </View>
+              <View style={style.progressBarContainer}>
+                <View style={style.progressBarBackground}>
+                  <View style={[style.progressBarFill, { width: `${skill.progress}%` }]} />
                 </View>
               </View>
-              <Text style={style.skillTitle}>{skill}</Text>
-              <Text style={style.skillProgressText}>Progress: {40 + i * 15}%</Text>
+              <Text style={style.skillTitle}>{skill.name}</Text>
+              <Text style={style.skillProgressText}>Progreso: {skill.progress}%</Text>
+              <View style={style.buttonRow}>
+                <TouchableOpacity onPress={() => navigation.navigate('EditSkill', { index: i, skill })}>
+                  <Text style={style.editButtonText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDelete(i)}>
+                  <Text style={style.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </ScrollView>
@@ -135,7 +170,7 @@ const style = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5, // for Android shadow
   },
-    fabText: {
+  fabText: {
     color: '#fff',
     fontSize: 28,
   },
@@ -163,5 +198,19 @@ const style = StyleSheet.create({
     height: 8,
     backgroundColor: '#2563eb',
     borderRadius: 4,
+  },
+  editButtonText: {
+    color: '#2563eb',
+    marginTop: 8,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  deleteButtonText: {
+    color: 'red',
+    marginTop: 8,
   },
 });
